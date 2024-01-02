@@ -14,11 +14,12 @@ A tool for intialization of ctf pwn challenges inspired by https://github.com/io
 
 ## Install dependencies
 
+Run
 ```bash
 ./install_dependencies.sh
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
-Requires python3.6+
+Note: Requires python3.6+ to run
 
 ## Usage
 
