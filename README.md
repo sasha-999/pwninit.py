@@ -68,3 +68,40 @@ This isn't a very common problem, so in most cases `patchelf` is fine, but perso
 The way this manual patching is done is effectively a simpler version of `patchelf --replace-needed` and `patchelf --set-interpreter`, but it uses relative paths of symlinks which are shorter than the target strings.
 
 This can be disabled by using `--use-patchelf`.
+
+## Example
+
+```bash
+$ ls
+chall  libc.so.6
+$ readelf -Wd ./chall | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libpthread.so.0]
+$ pwninit.py 
+[*] bin: chall (arch = 'amd64')
+[*] libraries: {'libc': 'libc.so.6'}
+[*] libc: libc.so.6
+[*] libc version: (Ubuntu GLIBC 2.31-0ubuntu9.2) stable release version 2.31.
+
+[*] Fetching 'libpthread.so.0', 'ld-linux-x86-64.so.2' from https://launchpad.net/ubuntu/+archive/primary/+files/libc6_2.31-0ubuntu9.2_amd64.deb
+[+] Successfully fetched 'libpthread.so.0'
+[+] Successfully fetched 'ld-linux-x86-64.so.2'
+
+[*] Finding stripped libraries to unstrip
+[*] Unstripping 'libc.so.6', 'libpthread.so.0', 'ld-linux-x86-64.so.2'
+[*] Fetching debug symbols from https://launchpad.net/ubuntu/+archive/primary/+files/libc6-dbg_2.31-0ubuntu9.2_amd64.deb
+[+] Successfully unstripped 'libc.so.6'
+[+] Successfully unstripped 'libpthread.so.0'
+[+] Successfully unstripped 'ld-linux-x86-64.so.2'
+
+[*] Patching binary
+[*] Symlinking './ld' -> 'ld-linux-x86-64.so.2'
+[*] Symlinking './libc' -> 'libc.so.6'
+[*] Symlinking './libpthread' -> 'libpthread.so.0'
+[+] Successfully wrote patched binary to 'chall_patched'
+
+[*] Writing solve.py
+[+] Successfully written solve.py
+$ ls
+chall  chall_patched  ld  ld-linux-x86-64.so.2  libc  libc.so.6  libpthread  libpthread.so.0  solve.py
+```
