@@ -30,11 +30,13 @@ You can also specify the binary, libc or interpreter using `-b/--bin`, `--libc` 
 This is an additional script which uses the `libc` to download glibc source code files.
 This is useful in combination with debug symbols and a debugger like `gdb` which can list the source code relevant to the current point in the program's execution, and is very helpful in cases where you need to debug the inner workings of certain parts of glibc, such as `malloc`, `printf`, `dl-runtime` and more.
 
+![](assets/gdb_malloc_example.png)
+
 Running `pwnsrc.py` the first time will download a `.tar.xz` archive containing the glibc source code, using the libc to get the correct version.
 Like `pwninit.py`, `pwnsrc.py` will automatically find the libc, and it can also be specified with `--libc`.
 
 Once the archive has been downloaded, you can start extracting files from it, either manually or by using `--files`.
-Any number of files can be specified with `--files`, and it can be the basename (e.g. `malloc.c`) or the full path (e.g. `glibc-{version}/malloc/malloc.c`).
+Any number of files can be specified with `--files`, and it can be the basename (e.g. `malloc.c`) or the full path (e.g. `glibc-2.31/malloc/malloc.c`).
 
 `pwnsrc.py` will automatically find the archive if it exists, or it can be specified with `-s/--source`.
 
