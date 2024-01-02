@@ -10,6 +10,7 @@ A tool for intialization of ctf pwn challenges inspired by https://github.com/io
 * Patches the binary to use the correct interpreter and libraries, either manually or with `patchelf`.
 * Writes a solve script to the current directory from a selection of customizable templates.
 * Script that fetches glibc source code for better debugging.
+* Supports Ubuntu/Debian glibc.
 
 ## Install dependencies
 
@@ -55,3 +56,15 @@ The options include:
 * Whether to use `patchelf` by default.
 
 The path of this file is provided when you run `-h/--help`.
+
+### Patching
+
+One major change from the original `pwninit` is that patching the binary is done manually by default.
+The major reason for this is that even though `patchelf` is more versatile, it's method of patching can cause side effects for the binary.
+This arises because it has to resize and move data sections, and so it means the binary is loaded into memory differently to how it would've been without patching.
+While this doesn't usually affect the intended behaviour of the binary, it can sometimes affect exploitation, which is a problem as the whole point of `pwninit` is to simulate the remote environment.
+This isn't a very common problem, so in most cases `patchelf` is fine, but I have run into issues in the past.
+
+The way this manual patching is done is effectively a simpler version of `patchelf --replace-needed` and `patchelf --set-interpreter`, but it uses relative paths of symlinks which are shorter than the target strings.
+
+This can be disabled by using `--use-patchelf`.
