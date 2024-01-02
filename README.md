@@ -18,6 +18,7 @@ A tool for intialization of ctf pwn challenges inspired by https://github.com/io
 ./install_dependencies.sh
 pip install -r requirements.txt
 ```
+Requires python3.6+
 
 ## Usage
 
