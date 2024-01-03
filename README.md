@@ -19,7 +19,7 @@ Run
 ./install_dependencies.sh
 pip3 install -r requirements.txt
 ```
-Note: Requires python3.6+ to run
+Note: Requires python 3.6+
 
 ## Usage
 
