@@ -33,8 +33,6 @@ You can also specify the binary, libc or interpreter using `-b/--bin`, `--libc` 
 This is an additional script which uses the `libc` to download glibc source code files.
 This is useful in combination with debug symbols and a debugger like `gdb` which can list the source code relevant to the current point in the program's execution, and is very helpful in cases where you need to debug the inner workings of certain parts of glibc, such as `malloc`, `printf`, `dl-runtime` and more.
 
-![](assets/gdb_malloc_example.png)
-
 Running `pwnsrc.py` the first time will download a `.tar.xz` archive containing the glibc source code, using the libc to get the correct version.
 Like `pwninit.py`, `pwnsrc.py` will automatically find the libc, and it can also be specified with `--libc`.
 
@@ -71,7 +69,9 @@ The way this manual patching is done is effectively a simpler version of `patche
 
 This can be disabled by using `--use-patchelf`.
 
-## Example
+## Examples
+
+### `pwninit.py`
 
 ```bash
 $ ls
@@ -107,3 +107,27 @@ $ pwninit.py
 $ ls
 chall  chall_patched  ld  ld-linux-x86-64.so.2  libc  libc.so.6  libpthread  libpthread.so.0  solve.py
 ```
+
+### `pwnsrc.py`
+
+```bash
+$ ls
+dd1  libc-2.23.so
+$ pwnsrc.py
+[*] libc: libc-2.23.so
+[*] libc version: (Ubuntu GLIBC 2.23-0ubuntu10) stable release version 2.23, by Roland McGrath et al.
+[*] Fetching glibc source from https://launchpad.net/ubuntu/+archive/primary/+files/glibc-source_2.23-0ubuntu10_all.deb
+[+] Successfully written glibc-source to 'glibc-source-2.23.tar.xz'
+$ ls
+dd1  glibc-source-2.23.tar.xz  libc-2.23.so
+$ pwnsrc.py --files malloc.c
+[*] libc: libc-2.23.so
+[*] libc version: (Ubuntu GLIBC 2.23-0ubuntu10) stable release version 2.23, by Roland McGrath et al.
+
+[*] glibc source: glibc-source-2.23.tar.xz
+[*] Finding source code files
+[+] Successfully extracted 'malloc.c'
+$ ls
+dd1  glibc-source-2.23.tar.xz  libc-2.23.so  malloc.c
+```
+![](assets/gdb_malloc_example.png)
