@@ -60,8 +60,8 @@ The path of this file is provided when you run `-h/--help`.
 ### Patching
 
 One major change from the original [pwninit](https://github.com/io12/pwninit) is that patching the binary is done manually by default.
-The major reason for this is that even though `patchelf` is more versatile, it's method of patching can cause side effects for the binary.
-This arises because it has to resize and move data sections, and so it means the binary is loaded into memory differently to how it would've been without patching.
+The major reason for this is that even though `patchelf` is more versatile, its method of patching can cause side effects for the binary.
+This happens because it has to resize and move data sections, and so the binary is loaded into memory differently to how it would've been without patching.
 While this doesn't usually affect the intended behaviour of the binary, it can sometimes affect exploitation, which is a problem as the whole point of `pwninit` is to simulate the remote environment.
 This isn't a very common problem, so in most cases `patchelf` is fine, but personally I have run into issues with `patchelf` in the past.
 
