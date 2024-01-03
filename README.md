@@ -1,6 +1,6 @@
 # pwninit.py
 
-A tool for intialization of ctf pwn challenges inspired by https://github.com/io12/pwninit.
+A tool for intialization of ctf pwn challenges based on https://github.com/io12/pwninit.
 
 ## Features
 
