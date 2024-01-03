@@ -1,0 +1,7 @@
+TEMPLATE_BINARY_NAME = "e"
+TEMPLATE_LIBC_NAME = "libc"
+TEMPLATE_LD_NAME = "ld"
+DEFAULT_TEMPLATE = "default"
+PATCHED_BINARY_SUFFIX = "_patched"
+GLIBC_SOURCE_FORMAT = "glibc-source-{version}{ext}"
+USE_PATCHELF = False
