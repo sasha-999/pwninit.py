@@ -96,7 +96,7 @@ $ pwninit.py
 [+] Successfully unstripped 'libpthread.so.0'
 [+] Successfully unstripped 'ld-linux-x86-64.so.2'
 
-[*] Patching binary
+[*] Patching binary manually
 [*] Symlinking './ld' -> 'ld-linux-x86-64.so.2'
 [*] Symlinking './libc' -> 'libc.so.6'
 [*] Symlinking './libpthread' -> 'libpthread.so.0'
