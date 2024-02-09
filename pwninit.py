@@ -476,15 +476,13 @@ if __name__ == "__main__":
     log.info(f"bin: {binary} ({arch = })")
     if static:
         libraries = {}
+        do_patch = False
         log.warning("Binary is statically linked, not patching the binary")
-    else:
-        if not libraries:
-            log.fatal("No libraries found!")
-        log.info(f"libraries: {libraries}")
-
-        libc = libraries.get("libc", None)
-        if libc is None:
-            log.fatal("Libc not found!")
+    elif not libraries:
+        do_patch = False
+        log.warning("No libraries were found, not patching the binary")
+    elif libraries.get("libc", None):
+        libc = libraries["libc"]
         log.info(f"libc: {libc}")
         version = get_libc_version(libc, arch=arch)
 
@@ -551,14 +549,14 @@ if __name__ == "__main__":
             else:
                 log.error(f"Failed to create folder {folder!r}: {exception!r}")
 
-        if do_patch:
-            print()
-            if args.use_patchelf:
-                log.info("Patching binary using patchelf")
-                binary = patch_binary_patchelf(binary, libraries)
-            else:
-                log.info("Patching binary manually")
-                binary = patch_binary(binary, libraries)
+    if do_patch:
+        print()
+        if args.use_patchelf:
+            log.info("Patching binary using patchelf")
+            binary = patch_binary_patchelf(binary, libraries)
+        else:
+            log.info("Patching binary manually")
+            binary = patch_binary(binary, libraries)
 
     utils.chmod_x(binary)
     if do_solvepy:
