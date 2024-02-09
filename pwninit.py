@@ -442,11 +442,11 @@ if __name__ == "__main__":
         help="Path of libc")
     ap.add_argument("--ld", default=None,
         help="Path of interpreter")
-    ap.add_argument("--no-unstrip", default=False, action="store_true",
+    ap.add_argument("-nu", "--no-unstrip", default=False, action="store_true",
         help="Disable unstripping of libraries (ignored if binary is static)")
-    ap.add_argument("--no-patch", default=False, action="store_true",
+    ap.add_argument("-np", "--no-patch", default=False, action="store_true",
         help="Disable patching of binary (ignored if binary is static)")
-    ap.add_argument("--no-solvepy", default=False, action="store_true",
+    ap.add_argument("-ns", "--no-solvepy", default=False, action="store_true",
         help="Disable writing solve.py")
     ap.add_argument("--use-patchelf", default=config.USE_PATCHELF,
         action="store_true",
