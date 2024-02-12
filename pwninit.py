@@ -562,4 +562,8 @@ if __name__ == "__main__":
     if do_solvepy:
         print()
         log.info("Writing solve.py")
-        write_solvepy(binary, libraries, template=args.template)
+        try:
+            open("solve.py","r").close()
+            log.warning("solve.py already exists")
+        except OSError:
+            write_solvepy(binary, libraries, template=args.template)
