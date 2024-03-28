@@ -161,12 +161,21 @@ def get_lib_name(lib):
 
 def find_binaries(binary=None, libc=None, ld=None):
     libraries = {}
+    if ld:
+        libraries["ld"] = ld
+    if libc:
+        libraries["libc"] = libc
     for file in os.listdir():
         # library must end in ".so" or ".so.X" or ".so.X.Y" ...
         if not re.search(r"\.so(?:(?:\.\d+)+|)$", file):
             # otherwise if no binary is found, check if it could be the binary
             if binary is None and elfutils.is_elf(file):
-                binary = file
+                # ensure that this isn't a file we know about already
+                for file2 in libraries.values():
+                    if os.path.samefile(file, file2):
+                        break
+                else:
+                    binary = file
             continue
         if not elfutils.is_elf(file):
             continue
@@ -188,10 +197,6 @@ def find_binaries(binary=None, libc=None, ld=None):
             log.warning(f"Duplicate libraries {file!r} and {file2!r}, defaulting to {file2!r}")
             continue
         libraries[name] = file
-    if ld:
-        libraries["ld"] = ld
-    if libc:
-        libraries["libc"] = libc
     return binary, libraries
 
 
