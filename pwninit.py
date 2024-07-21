@@ -180,8 +180,6 @@ def find_binaries(binary=None, libc=None, ld=None):
                 else:
                     binary = file
             continue
-        if not elfutils.is_elf(file):
-            continue
         # if ld or libc were supplied, never overwrite them
         # or add any other libcs or lds
         # and by extension check for duplicates
@@ -189,6 +187,9 @@ def find_binaries(binary=None, libc=None, ld=None):
         if lib_name == "ld" and ld is not None:
             continue
         elif lib_name == "libc" and libc is not None:
+            continue
+        # only check it's an ELF when necessary
+        if not elfutils.is_elf(file):
             continue
         # check duplicate
         file2 = libraries.get(lib_name, None)
@@ -299,7 +300,7 @@ def unstrip_libraries(libraries, version):
     return True
 
 
-def patch_binary(path, libraries):
+def patch_binary(path, libraries, output=None):
     patches = []
     with open(path, "rb") as f:
         elf = ELFFile(f)
@@ -337,31 +338,37 @@ def patch_binary(path, libraries):
     if successful_patches == 0:
         log.warning(f"No patches were made, using original binary {path!r}")
         return path
-    new_path = path + config.PATCHED_BINARY_SUFFIX
-    with open(new_path, "wb+") as f:
+    if output is None:
+        output = path + config.PATCHED_BINARY_SUFFIX
+    with open(output, "wb+") as f:
         f.write(bytes(contents))
-    if successful_patches == len(patches):
-        log.success(f"Successfully wrote patched binary to {new_path!r}")
+    missing_patches = len(patches) - successful_patches
+    if missing_patches == 0:
+        log.success(f"Successfully wrote patched binary to {output!r}")
     else:
-        log.warning(f"Wrote patched binary to {new_path!r}, with some missing patches")
-    return new_path
+        word = "patch"
+        if missing_patches > 1:
+            word += "es"
+        log.warning(f"Wrote patched binary to {output!r}, with {missing_patches} missing {word}")
+    return output
 
 
-def patch_binary_patchelf(path, libraries):
-    new_path = path + config.PATCHED_BINARY_SUFFIX
+def patch_binary_patchelf(path, libraries, output=None):
+    if output is None:
+        output = path + config.PATCHED_BINARY_SUFFIX
     with open(path, "rb") as f:
         elf = ELFFile(f)
         needed = elfutils.get_needed(elf)
     number_of_patches = len(needed)
     successful_patches = 0
-    # suffix could be empty
-    if path != new_path:
-        shutil.copyfile(path, new_path)
+    # if outputting to a different file, make a copy
+    if not os.path.exists(output) or not os.path.samefile(path, output):
+        shutil.copyfile(path, output)
     ld = libraries.get("ld", None)
     if ld:
         number_of_patches += 1
         ld = utils.basename_to_relpath(ld)
-        _, stderr = utils.run_patchelf(new_path, ["--set-interpreter", ld])
+        _, stderr = utils.run_patchelf(output, ["--set-interpreter", ld])
         if stderr:
             log.error(f"Failed to patch interpreter: {stderr!r}")
         else:
@@ -372,18 +379,22 @@ def patch_binary_patchelf(path, libraries):
             log.error(f"Couldn't find library for {lib!r}, skipping")
             continue
         patch = utils.basename_to_relpath(libraries[lib_name])
-        _, stderr = utils.run_patchelf(new_path, ["--replace-needed", lib, patch])
+        _, stderr = utils.run_patchelf(output, ["--replace-needed", lib, patch])
         if stderr:
             log.error(f"Failed to replace {lib!r} with {patch!r}: {stderr!r}")
         else:
             successful_patches += 1
+    missing_patches = number_of_patches - successful_patches
     if successful_patches == 0:
         log.warning(f"No patches were made")
-    elif successful_patches == number_of_patches:
-        log.success(f"Successfully wrote patched binary to {new_path!r}")
+    elif missing_patches == 0:
+        log.success(f"Successfully wrote patched binary to {output!r}")
     else:
-        log.warning(f"Wrote patched binary to {new_path!r}, with some missing patches")
-    return new_path
+        word = "patch"
+        if missing_patches > 1:
+            word += "es"
+        log.warning(f"Wrote patched binary to {output!r}, with {missing_patches} missing {word}")
+    return output
 
 
 def write_solvepy(binary, libraries, template=None):
@@ -440,11 +451,11 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter,
         description=("Automates the initialization of a pwn challenge.\n"
             f"The config.py file is located at {config.__file__}"))
-    ap.add_argument("-b", "--bin", default=None,
+    ap.add_argument("-b", "--bin", default=None, dest="binary",
         help="Path of binary to patch")
-    ap.add_argument("--libc", default=None,
+    ap.add_argument("--libc", default=None, dest="libc",
         help="Path of libc")
-    ap.add_argument("--ld", default=None,
+    ap.add_argument("--ld", default=None, dest="ld",
         help="Path of interpreter")
     ap.add_argument("-nu", "--no-unstrip", default=False, action="store_true",
         help="Disable unstripping of libraries (ignored if binary is static)")
@@ -455,18 +466,21 @@ if __name__ == "__main__":
     ap.add_argument("--use-patchelf", default=config.USE_PATCHELF,
         action="store_true",
         help="Use patchelf for patching the binary")
-    ap.add_argument("-l", "--libs", default=None,
+    ap.add_argument("-l", "--libs", default=None, dest="libs",
         help="Path of folder to store libraries in (ignored if binary is static)")
     ap.add_argument("-t", "--template", default=config.DEFAULT_TEMPLATE,
-        choices=templates.get_available_templates(),
+        dest="template", choices=templates.get_available_templates(),
         help=("Template of solve script. "
             f"Templates are stored in {templates.get_templates_folder()}"))
+    ap.add_argument("-o", "--output", default=None, dest="output",
+        help=("Place patched binary into OUTPUT "
+            f"(defaults to BINARY{config.PATCHED_BINARY_SUFFIX})"))
 
     args = ap.parse_args()
     do_unstrip = not args.no_unstrip
     do_patch = not args.no_patch
     do_solvepy = not args.no_solvepy
-    binary, libraries = find_binaries(binary=args.bin, libc=args.libc, ld=args.ld)
+    binary, libraries = find_binaries(binary=args.binary, libc=args.libc, ld=args.ld)
     if binary is None:
         log.fatal("No binary was supplied or found!")
     with open(binary, "rb") as f:
@@ -557,17 +571,17 @@ if __name__ == "__main__":
         print()
         if args.use_patchelf:
             log.info("Patching binary using patchelf")
-            binary = patch_binary_patchelf(binary, libraries)
+            binary = patch_binary_patchelf(binary, libraries, output=args.output)
         else:
             log.info("Patching binary manually")
-            binary = patch_binary(binary, libraries)
+            binary = patch_binary(binary, libraries, output=args.output)
 
     utils.chmod_x(binary)
     if do_solvepy:
         print()
         log.info("Writing solve.py")
         try:
-            open("solve.py","r").close()
+            open("solve.py", "r").close()
             log.warning("solve.py already exists")
         except OSError:
             write_solvepy(binary, libraries, template=args.template)
