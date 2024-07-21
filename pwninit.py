@@ -143,11 +143,12 @@ class LibcVersion:
         return self.raw
 
 
-# takes the form: libc.so.XXX, libc.so, libc-2.27.so, libc_2.27.so
+# takes the form: libname.so.XXX, libname.so, libname-2.27.so, libname_2.27.so
+# also accepts: libcXXX, ld-XXX, ld
 def get_lib_name(lib):
     basename = os.path.basename(lib)
     # ld names are more complex than other libraries
-    if basename.startswith("ld-"):
+    if basename.startswith("ld-") or basename == "ld":
         return "ld"
     # this is for greater compatibility with pwninit libc detection
     if basename.startswith("libc"):
@@ -166,11 +167,13 @@ def find_binaries(binary=None, libc=None, ld=None):
     if libc:
         libraries["libc"] = libc
     for file in os.listdir():
-        # library must end in ".so" or ".so.X" or ".so.X.Y" ...
-        if not re.search(r"\.so(?:(?:\.\d+)+|)$", file):
+        # check if file is a library
+        lib_name = get_lib_name(file)
+        if lib_name is None:
             # otherwise if no binary is found, check if it could be the binary
             if binary is None and elfutils.is_elf(file):
                 # ensure that this isn't a file we know about already
+                # (samefile() returns true for a file and symlink to the file)
                 for file2 in libraries.values():
                     if os.path.samefile(file, file2):
                         break
@@ -183,20 +186,16 @@ def find_binaries(binary=None, libc=None, ld=None):
         # or add any other libcs or lds
         # and by extension check for duplicates
         # since we know which one to use
-        name = get_lib_name(file)
-        if name is None:
-            # ignore if it has an invalid library name
+        if lib_name == "ld" and ld is not None:
             continue
-        elif name == "ld" and ld is not None:
-            continue
-        elif name == "libc" and libc is not None:
+        elif lib_name == "libc" and libc is not None:
             continue
         # check duplicate
-        file2 = libraries.get(name, None)
+        file2 = libraries.get(lib_name, None)
         if file2:
             log.warning(f"Duplicate libraries {file!r} and {file2!r}, defaulting to {file2!r}")
             continue
-        libraries[name] = file
+        libraries[lib_name] = file
     return binary, libraries
 
 
@@ -314,17 +313,17 @@ def patch_binary(path, libraries):
 
     successful_patches = 0
     for needed, i in patches:
-        name = get_lib_name(needed)
-        if name is None or name not in libraries:
+        lib_name = get_lib_name(needed)
+        if lib_name is None or lib_name not in libraries:
             log.error(f"Couldn't find library for {needed!r}, skipping")
             continue
-        symlink = "./" + name
+        symlink = "./" + lib_name
         if len(needed) < len(symlink):
             log.error(f"Patch {symlink!r} is longer than the existing needed library {needed!r}, skipping")
             continue
         patch = symlink.encode() + b"\x00"
         contents[i:i+len(patch)] = patch
-        target = libraries[name]
+        target = libraries[lib_name]
         if os.path.abspath(symlink) != os.path.abspath(target):
             log.info(f"Symlinking {symlink!r} -> {target!r}")
             try:
@@ -368,11 +367,11 @@ def patch_binary_patchelf(path, libraries):
         else:
             successful_patches += 1
     for lib in needed:
-        name = get_lib_name(lib)
-        if name is None or name not in libraries:
+        lib_name = get_lib_name(lib)
+        if lib_name is None or lib_name not in libraries:
             log.error(f"Couldn't find library for {lib!r}, skipping")
             continue
-        patch = utils.basename_to_relpath(libraries[name])
+        patch = utils.basename_to_relpath(libraries[lib_name])
         _, stderr = utils.run_patchelf(new_path, ["--replace-needed", lib, patch])
         if stderr:
             log.error(f"Failed to replace {lib!r} with {patch!r}: {stderr!r}")
@@ -493,10 +492,10 @@ if __name__ == "__main__":
 
         missing = []
         for needed_lib in needed:
-            name = get_lib_name(needed_lib)
-            if name is None:
+            lib_name = get_lib_name(needed_lib)
+            if lib_name is None:
                 continue
-            if libraries.get(name, None) is None:
+            if libraries.get(lib_name, None) is None:
                 missing.append(needed_lib)
 
         ld = libraries.get("ld", None)
