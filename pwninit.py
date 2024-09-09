@@ -159,6 +159,13 @@ def get_lib_name(lib):
     name = match.group(1)
     return name
 
+def is_patched(file):
+    if not config.PATCHED_BINARY_SUFFIX:
+        return False
+    return file.endswith(config.PATCHED_BINARY_SUFFIX)
+
+def replace_link(old, new):
+    return os.path.islink(old) and not os.path.islink(new)
 
 def find_binaries(binary=None, libc=None, ld=None):
     libraries = {}
@@ -166,12 +173,21 @@ def find_binaries(binary=None, libc=None, ld=None):
         libraries["ld"] = ld
     if libc:
         libraries["libc"] = libc
+    binary_provided = binary is not None
     for file in os.listdir():
+        if not elfutils.is_elf(file):
+            continue
         # check if file is a library
         lib_name = get_lib_name(file)
         if lib_name is None:
-            # otherwise if no binary is found, check if it could be the binary
-            if binary is None and elfutils.is_elf(file):
+            if binary_provided:
+                continue
+            # if the current binary:
+            # * hasn't been found
+            # * was already patched
+            # * is a symlink
+            # see if we can replace it
+            if binary is None or is_patched(binary) or replace_link(binary, file):
                 # ensure that this isn't a file we know about already
                 # (samefile() returns true for a file and symlink to the file)
                 for file2 in libraries.values():
@@ -188,12 +204,13 @@ def find_binaries(binary=None, libc=None, ld=None):
             continue
         elif lib_name == "libc" and libc is not None:
             continue
-        # only check it's an ELF when necessary
-        if not elfutils.is_elf(file):
-            continue
         # check duplicate
         file2 = libraries.get(lib_name, None)
         if file2:
+            if replace_link(file2, file):
+                # prioritise non-symlink files
+                libraries[lib_name] = file
+                file, file2 = file2, file
             log.warning(f"Duplicate libraries {file!r} and {file2!r}, defaulting to {file2!r}")
             continue
         libraries[lib_name] = file
