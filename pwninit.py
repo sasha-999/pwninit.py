@@ -136,8 +136,12 @@ class LibcVersion:
     def can_fetch_files(self):
         return bool(self.pkgname)
 
-    def get_libc6_pkg_path(self, name):
-        return os.path.join(f"./lib/{self.arch_linux_gnu}/", name)
+    def get_libc6_pkg_paths(self, name):
+        return [
+            os.path.join(f"./lib/{self.arch_linux_gnu}/", name),
+            # seems to be used in ubuntu glibc 2.39
+            os.path.join(f"./usr/lib/{self.arch_linux_gnu}/", name),
+        ]
 
     def __str__(self):
         return self.raw
@@ -228,7 +232,7 @@ def fetch_missing_libraries(missing, libraries, version):
     dsts = []
     for i, needed_lib in enumerate(missing):
         name = os.path.basename(needed_lib)
-        missing[i] = version.get_libc6_pkg_path(name)
+        missing[i] = version.get_libc6_pkg_paths(name)
         dsts.append(name)
     url = version.libc_pkgurl
     print()
@@ -240,18 +244,23 @@ def fetch_missing_libraries(missing, libraries, version):
         if tar is None:
             log.error(f"Failed to fetch files: {pkg.error!r}")
             return False
-        for file, dst in zip(missing, dsts):
-            name = os.path.basename(file)
-            try:
-                fsrc = tar.extractfile(file)
-            except KeyError:
-                log.error(f"Failed to fetch {name!r}")
+        for files, dst in zip(missing, dsts):
+            fsrc = None
+            for file in files:
+                name = os.path.basename(file)
+                try:
+                    fsrc = tar.extractfile(file)
+                    break
+                except KeyError:
+                    pass
+            else:
+                log.error(f"Failed to fetch {dst!r}")
                 continue
 
             with open(dst, "wb+") as fdst, fsrc:
                 shutil.copyfileobj(fsrc, fdst)
             successes.append(dst)
-            log.success(f"Successfully fetched {name!r}")
+            log.success(f"Successfully fetched {dst!r}")
     for lib in successes:
         libraries[get_lib_name(lib)] = lib
     return len(dsts) == len(successes)
