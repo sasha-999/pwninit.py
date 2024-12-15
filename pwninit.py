@@ -29,10 +29,10 @@ class LibcVersion:
         self.flavour = None
         self.pkgname = None
 
-        match = re.match(r"(?:\((.+?)\) )?(stable|development) release version (\d+(?:\.\d+)+)", self.raw)
+        match = re.match(r"(?:GNU C Library )?(?:\((.+?)\) )?([a-z]+) release version (\d+(?:\.\d+)+)", self.raw)
         if match is None:
             return
-        # release = "stable" or "development"
+        # release = "stable", "development" or "release"
         self.release = match.group(2)
         # Ex. version_string = "2.27", version = (2,27)
         self.version_string = match.group(3)
@@ -52,7 +52,7 @@ class LibcVersion:
 
     @property
     def is_stable(self):
-        return self.release == "stable"
+        return self.release in ("stable", "release")
 
     @property
     def os(self):
