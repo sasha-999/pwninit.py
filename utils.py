@@ -26,8 +26,11 @@ def run_ar(args, cwd=None):
 def chmod_x(path):
     return run_command("chmod", ["+x", path])
 
+def is_basename(path):
+    return os.path.basename(path) == path
+
 def basename_to_relpath(name):
-    if os.path.basename(name) == name:
+    if is_basename(name):
         return os.path.join(".", name)
     return name
 

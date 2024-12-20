@@ -171,18 +171,20 @@ def is_patched(file):
 def replace_link(old, new):
     return os.path.islink(old) and not os.path.islink(new)
 
-def find_binaries(binary=None, libc=None, ld=None):
-    libraries = {}
+def find_binaries(binary=None, libc=None, ld=None, folder=".", libraries=None):
+    if libraries is None:
+        libraries = {}
     if ld:
         libraries["ld"] = ld
     if libc:
         libraries["libc"] = libc
     binary_provided = binary is not None
-    for file in os.listdir():
-        if not elfutils.is_elf(file):
+    for filename in os.listdir(folder):
+        path = os.path.join(folder, filename)
+        if not elfutils.is_elf(path):
             continue
         # check if file is a library
-        lib_name = get_lib_name(file)
+        lib_name = get_lib_name(filename)
         if lib_name is None:
             if binary_provided:
                 continue
@@ -191,14 +193,14 @@ def find_binaries(binary=None, libc=None, ld=None):
             # * was already patched
             # * is a symlink
             # see if we can replace it
-            if binary is None or is_patched(binary) or replace_link(binary, file):
+            if binary is None or is_patched(binary) or replace_link(binary, path):
                 # ensure that this isn't a file we know about already
                 # (samefile() returns true for a file and symlink to the file)
-                for file2 in libraries.values():
-                    if os.path.samefile(file, file2):
+                for path2 in libraries.values():
+                    if os.path.samefile(path, path2):
                         break
                 else:
-                    binary = file
+                    binary = path
             continue
         # if ld or libc were supplied, never overwrite them
         # or add any other libcs or lds
@@ -209,15 +211,15 @@ def find_binaries(binary=None, libc=None, ld=None):
         elif lib_name == "libc" and libc is not None:
             continue
         # check duplicate
-        file2 = libraries.get(lib_name, None)
-        if file2:
-            if replace_link(file2, file):
+        path2 = libraries.get(lib_name, None)
+        if path2:
+            if replace_link(path2, path):
                 # prioritise non-symlink files
-                libraries[lib_name] = file
-                file, file2 = file2, file
-            log.warning(f"Duplicate libraries {file!r} and {file2!r}, defaulting to {file2!r}")
+                libraries[lib_name] = path
+                path, path2 = path2, path
+            log.warning(f"Duplicate libraries {path!r} and {path2!r}, defaulting to {path2!r}")
             continue
-        libraries[lib_name] = file
+        libraries[lib_name] = path
     return binary, libraries
 
 
@@ -326,7 +328,9 @@ def unstrip_libraries(libraries, version):
     return True
 
 
-def patch_binary(path, libraries, output=None):
+def patch_binary(path, libraries, output=None, dont_patch=None):
+    if dont_patch is None:
+        dont_patch = set()
     patches = []
     with open(path, "rb") as f:
         elf = ELFFile(f)
@@ -340,6 +344,9 @@ def patch_binary(path, libraries, output=None):
 
     successful_patches = 0
     for needed, i in patches:
+        if needed in dont_patch:
+            log.warning(f"{needed!r} already fulfilled, skipping")
+            continue
         lib_name = get_lib_name(needed)
         if lib_name is None or lib_name not in libraries:
             log.error(f"Couldn't find library for {needed!r}, skipping")
@@ -379,12 +386,15 @@ def patch_binary(path, libraries, output=None):
     return output
 
 
-def patch_binary_patchelf(path, libraries, output=None):
+def patch_binary_patchelf(path, libraries, output=None, dont_patch=None):
+    if dont_patch is None:
+        dont_patch = set()
     if output is None:
         output = path + config.PATCHED_BINARY_SUFFIX
     with open(path, "rb") as f:
         elf = ELFFile(f)
         needed = elfutils.get_needed(elf)
+        requested_linker = elfutils.get_interp(elf)
     number_of_patches = len(needed)
     successful_patches = 0
     # if outputting to a different file, make a copy
@@ -392,14 +402,20 @@ def patch_binary_patchelf(path, libraries, output=None):
         shutil.copyfile(path, output)
     ld = libraries.get("ld", None)
     if ld:
-        number_of_patches += 1
-        ld = utils.basename_to_relpath(ld)
-        _, stderr = utils.run_patchelf(output, ["--set-interpreter", ld])
-        if stderr:
-            log.error(f"Failed to patch interpreter: {stderr!r}")
+        if requested_linker not in dont_patch:
+            number_of_patches += 1
+            ld = utils.basename_to_relpath(ld)
+            _, stderr = utils.run_patchelf(output, ["--set-interpreter", ld])
+            if stderr:
+                log.error(f"Failed to patch interpreter: {stderr!r}")
+            else:
+                successful_patches += 1
         else:
-            successful_patches += 1
+            log.warning(f"{requested_linker!r} already fulfilled, skipping")
     for lib in needed:
+        if lib in dont_patch:
+            log.warning(f"{lib!r} already fulfilled, skipping")
+            continue
         lib_name = get_lib_name(lib)
         if lib_name is None or lib_name not in libraries:
             log.error(f"Couldn't find library for {lib!r}, skipping")
@@ -516,9 +532,30 @@ if __name__ == "__main__":
             log.fatal("Architecture not supported!")
         requested_linker = elfutils.get_interp(elf)
         needed = elfutils.get_needed(elf)
-        static = elfutils.get_dynamic(elf) is None
-    log.info(f"bin: {binary} ({arch = })")
-    if static:
+        dynamic = elfutils.get_dynamic(elf)
+        log.info(f"bin: {binary} ({arch = })")
+        if dynamic:
+            runpath = elfutils.get_runpath_from_dynamic(dynamic)
+            if runpath:
+                log.info(f"RUNPATH: {runpath}")
+            runpath_libs = {}
+            for path in runpath:
+                if not os.path.isdir(path):
+                    continue
+                find_binaries(binary=binary, folder=path, libraries=runpath_libs)
+            dont_patch = set()
+            for needed in elfutils.get_needed_from_dynamic(dynamic):
+                if not utils.is_basename(needed) or get_lib_name(needed) in runpath_libs:
+                    dont_patch.add(needed)
+            # check if this exists?
+            if not os.path.isabs(requested_linker):
+                # normally an absolute path, so this means it's definitely patched
+                dont_patch.add(requested_linker)
+            #if not any(lambda x: requested_linker.startswith(x), ["/lib/", "/lib64/"]):
+            #    dont_patch.add(requested_linker)
+            libraries = runpath_libs | libraries
+
+    if dynamic is None:
         libraries = {}
         do_patch = False
         log.warning("Binary is statically linked, not patching the binary")
@@ -567,7 +604,7 @@ if __name__ == "__main__":
                 log.info(f"Unstripping {unstrip_libs_list}")
                 unstrip_libraries(unstrip_libs, version)
             else:
-                log.info("No libraries to unstrip")
+                log.warning("No libraries to unstrip")
 
         if args.libs:
             folder = args.libs
@@ -597,10 +634,10 @@ if __name__ == "__main__":
         print()
         if args.use_patchelf:
             log.info("Patching binary using patchelf")
-            binary = patch_binary_patchelf(binary, libraries, output=args.output)
+            binary = patch_binary_patchelf(binary, libraries, output=args.output, dont_patch=dont_patch)
         else:
             log.info("Patching binary manually")
-            binary = patch_binary(binary, libraries, output=args.output)
+            binary = patch_binary(binary, libraries, output=args.output, dont_patch=dont_patch)
 
     utils.chmod_x(binary)
     if do_solvepy:
