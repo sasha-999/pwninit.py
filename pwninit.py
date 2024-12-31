@@ -149,7 +149,7 @@ class LibcVersion:
 
 # takes the form: libname.so.XXX, libname.so, libname-2.27.so, libname_2.27.so
 # also accepts: libcXXX, ld-XXX, ld
-def get_lib_name(lib):
+def get_lib_name(lib, strict=False):
     basename = os.path.basename(lib)
     # ld names are more complex than other libraries
     if basename.startswith("ld-") or basename == "ld":
@@ -159,8 +159,12 @@ def get_lib_name(lib):
         return "libc"
     match = re.match(r"(.+?)(?:[-_]\d+\.\d+)?\.so", basename)
     if not match:
-        return None
+        if strict:
+            return None
+        return basename
     name = match.group(1)
+    #if strict and not name.startswith("lib"):
+    #    return None
     return name
 
 def is_patched(file):
@@ -184,7 +188,7 @@ def find_binaries(binary=None, libc=None, ld=None, folder=".", libraries=None):
         if not elfutils.is_elf(path):
             continue
         # check if file is a library
-        lib_name = get_lib_name(filename)
+        lib_name = get_lib_name(filename, strict=True)
         if lib_name is None:
             if binary_provided:
                 continue
@@ -348,7 +352,7 @@ def patch_binary(path, libraries, output=None, dont_patch=None):
             log.warning(f"{needed!r} already fulfilled, skipping")
             continue
         lib_name = get_lib_name(needed)
-        if lib_name is None or lib_name not in libraries:
+        if lib_name not in libraries:
             log.error(f"Couldn't find library for {needed!r}, skipping")
             continue
         symlink = "./" + lib_name
@@ -417,7 +421,7 @@ def patch_binary_patchelf(path, libraries, output=None, dont_patch=None):
             log.warning(f"{lib!r} already fulfilled, skipping")
             continue
         lib_name = get_lib_name(lib)
-        if lib_name is None or lib_name not in libraries:
+        if lib_name not in libraries:
             log.error(f"Couldn't find library for {lib!r}, skipping")
             continue
         patch = utils.basename_to_relpath(libraries[lib_name])
@@ -531,10 +535,10 @@ if __name__ == "__main__":
         if arch is None:
             log.fatal("Architecture not supported!")
         requested_linker = elfutils.get_interp(elf)
-        needed = elfutils.get_needed(elf)
         dynamic = elfutils.get_dynamic(elf)
         log.info(f"bin: {binary} ({arch = })")
         if dynamic:
+            needed = elfutils.get_needed_from_dynamic(dynamic)
             runpath = elfutils.get_runpath_from_dynamic(dynamic)
             if runpath:
                 log.info(f"RUNPATH: {runpath}")
@@ -544,13 +548,18 @@ if __name__ == "__main__":
                     continue
                 find_binaries(binary=binary, folder=path, libraries=runpath_libs)
             dont_patch = set()
-            for needed in elfutils.get_needed_from_dynamic(dynamic):
-                if not utils.is_basename(needed) or get_lib_name(needed) in runpath_libs:
-                    dont_patch.add(needed)
+            for needed_lib in needed:
+                lib_name = get_lib_name(needed_lib)
+                if not utils.is_basename(needed_lib) and elfutils.is_elf(needed_lib):
+                    dont_patch.add(needed_lib)
+                    libraries[lib_name] = needed_lib
+                if utils.is_basename(needed_lib) and lib_name in runpath_libs:
+                    dont_patch.add(needed_lib)
             # check if this exists?
-            if not os.path.isabs(requested_linker):
+            if not os.path.isabs(requested_linker) and elfutils.is_elf(requested_linker):
                 # normally an absolute path, so this means it's definitely patched
                 dont_patch.add(requested_linker)
+                libraries["ld"] = requested_linker
             #if not any(lambda x: requested_linker.startswith(x), ["/lib/", "/lib64/"]):
             #    dont_patch.add(requested_linker)
             libraries = runpath_libs | libraries
@@ -570,8 +579,6 @@ if __name__ == "__main__":
         missing = []
         for needed_lib in needed:
             lib_name = get_lib_name(needed_lib)
-            if lib_name is None:
-                continue
             if libraries.get(lib_name, None) is None:
                 missing.append(needed_lib)
 
