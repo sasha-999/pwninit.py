@@ -556,7 +556,7 @@ if __name__ == "__main__":
                 if utils.is_basename(needed_lib) and lib_name in runpath_libs:
                     dont_patch.add(needed_lib)
             # check if this exists?
-            if not os.path.isabs(requested_linker) and elfutils.is_elf(requested_linker):
+            if requested_linker and not os.path.isabs(requested_linker) and elfutils.is_elf(requested_linker):
                 # normally an absolute path, so this means it's definitely patched
                 dont_patch.add(requested_linker)
                 libraries["ld"] = requested_linker
@@ -584,7 +584,8 @@ if __name__ == "__main__":
 
         ld = libraries.get("ld", None)
         if ld is None:
-            missing.append(requested_linker)
+            if requested_linker:
+                missing.append(requested_linker)
         else:
             log.info(f"ld: {ld}")
 
