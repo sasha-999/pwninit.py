@@ -155,7 +155,7 @@ def get_lib_name(lib, strict=False):
     if basename.startswith("ld-") or basename == "ld":
         return "ld"
     # this is for greater compatibility with pwninit libc detection
-    if basename.startswith("libc"):
+    if basename.startswith("libc") and not basename[4:5].isalpha():
         return "libc"
     match = re.match(r"(.+?)(?:[-_]\d+\.\d+)?\.so", basename)
     if not match:
