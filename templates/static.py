@@ -2,10 +2,17 @@
 from pwn import *
 
 {bindings}
-if args.REMOTE:
-    conn = lambda: remote("", )
-else:
-    conn = lambda: e.process()
+
+def conn(level=None):
+    if args.REMOTE:
+        return remote("", 1337, level=level)
+    ARGS = []
+    if args.GDB:
+        gdbscript = """
+        continue
+        """
+        return e.debug(argv=ARGS, gdbscript=gdbscript, level=level)
+    return e.process(argv=ARGS, level=level)
 
 p = conn()
 
