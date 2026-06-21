@@ -4,10 +4,10 @@ import shutil
 import sys
 import tarfile
 
-import config
-import deb
-import log
-import pwninit
+from src import config
+from src import core
+from src import deb
+from src import log
 
 if __name__ == "__main__":
     import argparse
@@ -30,13 +30,13 @@ if __name__ == "__main__":
         if args.libc:
             libc = args.libc
         else:
-            _, libraries = pwninit.find_binaries(libc=None, binary="", ld="")
+            _, libraries = core.find_binaries(libc=None, binary="", ld="")
             libc = libraries.get("libc", None)
         if libc is None:
             log.fatal("No libc was supplied or found!")
         log.info(f"libc: {libc}")
         # arch isn't necessary to fetch glibc-source, so this works on any arch
-        version = pwninit.get_libc_version(libc)
+        version = core.get_libc_version(libc)
         # seems to be the only one used?
         ext = "xz"
         full_ext = f".tar.{ext}"

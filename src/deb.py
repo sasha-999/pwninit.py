@@ -5,7 +5,7 @@ import tempfile
 
 import requests
 
-import utils
+from . import utils
 
 
 class DebPackage:

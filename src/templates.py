@@ -1,9 +1,7 @@
 import os
 
-
 def get_templates_folder():
-    return os.path.join(os.path.dirname(__file__), "templates/")
-
+    return os.path.join(os.path.dirname(__file__), "../templates/")
 
 def get_available_templates():
     templates = []
@@ -12,7 +10,6 @@ def get_available_templates():
             continue
         templates.append(file.rsplit(".py", 1)[0])
     return templates
-
 
 def get_template(name):
     path = os.path.join(get_templates_folder(), f"{name}.py")

@@ -16,7 +16,7 @@ A tool for intialization of ctf pwn challenges based on https://github.com/io12/
 
 Run
 ```bash
-./install_dependencies.sh
+./install_apt_dependencies.sh
 pip3 install -r requirements.txt
 ```
 Note: Requires python 3.6+
