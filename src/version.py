@@ -68,6 +68,7 @@ class LibcVersion:
 
     @property
     def libc_dbg_debname(self):
+        # TODO: add support for debug symbols of multiarch libcs of this form
         # for multiarch ones:
         # e.g. libc6-i386-dbgsym_2.35-0ubuntu3.10_amd64.ddeb
         if self.pkgname and self.arch:
@@ -88,7 +89,7 @@ class LibcVersion:
         if self.os == "Debian":
             if self.is_glibc:
                 return "https://deb.debian.org/debian/pool/main/g/glibc/"
-            # for unstable releases:
+            # TODO: unstable releases
             # https://deb.sipwise.com/debian/pool/main/g/glibc/
         return None
 
@@ -129,6 +130,7 @@ class LibcVersion:
             os.path.join(f"./lib/{self.arch_linux_gnu}/", name),
             # seems to be used in ubuntu glibc 2.39
             os.path.join(f"./usr/lib/{self.arch_linux_gnu}/", name),
+            # TODO: add support for multiarch libc of this form
             # os.path.join(f"./usr/lib{bits}/", name),  # for libc6-i386_amd64 (32) / libc6-amd64_i386 (64) packages
         ]
     
