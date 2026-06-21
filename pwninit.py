@@ -12,157 +12,7 @@ import elfutils
 import log
 import templates
 import utils
-
-
-class LibcVersion:
-    def __init__(self, line, arch):
-        # line is what comes after "GNU C Library " and is of the form:
-        # ([PKGVERSION])? [stable/development] release version X.YZ.
-        self.raw = line.strip()
-        self.arch = arch
-
-        self.pkgversion = None
-        self.release = None
-        self.version_string = None
-        self.version = None     # tuple of numbers
-        # split up pkgversion
-        self.flavour = None
-        self.pkgname = None
-
-        match = re.match(r"(?:GNU C Library )?(?:\((.+?)\) )?([a-z]+) release version (\d+(?:\.\d+)+)", self.raw)
-        if match is None:
-            return
-        # release = "stable", "development" or "release"
-        self.release = match.group(2)
-        # Ex. version_string = "2.27", version = (2,27)
-        self.version_string = match.group(3)
-        self.version = tuple(int(x) for x in self.version_string.split("."))
-        # PKGVERSION
-        if match.group(1):
-            self.pkgversion = match.group(1)
-            words = self.pkgversion.split()
-            if words[-1].startswith(self.version_string):
-                self.pkgname = words.pop(-1)
-            self.flavour = " ".join(words)
-
-    @property
-    def is_custom(self):
-        # default pkgversion is "GNU libc" when compiling
-        return self.pkgversion == "GNU libc"
-
-    @property
-    def is_stable(self):
-        return self.release in ("stable", "release")
-
-    @property
-    def os(self):
-        if self.pkgversion is None:
-            return None
-        os = self.pkgversion.split()[0]
-        if os in ("Ubuntu", "Debian", "GNU"):
-            return os
-        return None
-
-    @property
-    def is_eglibc(self):
-        return "EGLIBC" in self.flavour
-
-    @property
-    def is_glibc(self):
-        return "GLIBC" in self.flavour and not self.is_eglibc
-
-    @property
-    def glibc_type(self):
-        if self.is_glibc:
-            return "GLIBC"
-        if self.is_eglibc:
-            return "EGLIBC"
-        return None
-
-    @property
-    def libc_debname(self):
-        if self.pkgname and self.arch:
-            return f"libc6_{self.pkgname}_{self.arch}.deb"
-        return None
-
-    @property
-    def libc_dbg_debname(self):
-        # for multiarch ones:
-        # e.g. libc6-i386-dbgsym_2.35-0ubuntu3.10_amd64.ddeb
-        if self.pkgname and self.arch:
-            return f"libc6-dbg_{self.pkgname}_{self.arch}.deb"
-        return None
-
-    @property
-    def libc_src_debname(self):
-        if self.pkgname:
-            return f"glibc-source_{self.pkgname}_all.deb"
-        return None
-
-    @property
-    def base_pkgurl(self):
-        if self.os == "Ubuntu":
-            # works for both glibc and eglibc
-            return "https://launchpad.net/ubuntu/+archive/primary/+files/"
-        if self.os == "Debian":
-            if self.is_glibc:
-                return "https://deb.debian.org/debian/pool/main/g/glibc/"
-            # for unstable releases:
-            # https://deb.sipwise.com/debian/pool/main/g/glibc/
-        return None
-
-    def _format_pkgurl(self, debname):
-        base = self.base_pkgurl
-        if base is None or debname is None:
-            return None
-        return base + debname
-
-    @property
-    def libc_pkgurl(self):
-        return self._format_pkgurl(self.libc_debname)
-
-    @property
-    def libc_dbg_pkgurl(self):
-        return self._format_pkgurl(self.libc_dbg_debname)
-
-    @property
-    def libc_src_pkgurl(self):
-        return self._format_pkgurl(self.libc_src_debname)
-
-    @property
-    def arch_linux_gnu(self):
-        return {
-            "amd64": "x86_64-linux-gnu",
-            "i386": "i386-linux-gnu",
-            "arm64": "aarch64-linux-gnu",
-            "armel": "arm-linux-gnueabi",
-            "armhf": "arm-linux-gnueabihf",
-            "mipsel": "mipsel-linux-gnu",
-            "mips64el": "mips64el-linux-gnuabi64",
-            "pp64el": "powerpc64le-linux-gnu",
-            "s390x": "s390x-linux-gnu",
-        }.get(self.arch, None)
-
-    def get_libc6_pkg_paths(self, name):
-        return [
-            os.path.join(f"./lib/{self.arch_linux_gnu}/", name),
-            # seems to be used in ubuntu glibc 2.39
-            os.path.join(f"./usr/lib/{self.arch_linux_gnu}/", name),
-            # os.path.join(f"./usr/lib{bits}/", name),  # for libc6-i386_amd64 (32) / libc6-amd64_i386 (64) packages
-        ]
-    
-    @property
-    def supported_architectures(self):
-        if self.os == "Ubuntu":
-            # supports libc6-armel_armhf not armel
-            return ["amd64", "i386", "arm64", "armhf", "ppc64el", "riscv64", "s390x"]
-        if self.os == "Debian":
-            return ["amd64", "i386", "arm64", "armel", "armhf", "mipsel", "mips64el", "ppc64el", "riscv64", "s390x"]
-        return []
-
-    def __str__(self):
-        return self.raw
-
+import version
 
 # takes the form: libname.so.XXX, libname.so, libname-2.27.so, libname_2.27.so
 # also accepts: libcXXX, ld-XXX, ld
@@ -244,23 +94,23 @@ def find_binaries(binary=None, libc=None, ld=None, folder=".", libraries=None):
     return binary, libraries
 
 
-def fetch_missing_libraries(missing, libraries, version):
+def fetch_missing_libraries(missing, libraries, libc):
     missing_list = ', '.join(repr(m) for m in missing)
-    if version is None:
+    if libc is None:
         log.error(f"Can't fetch {missing_list} without knowing the libc version")
         return False
-    if version.arch not in version.supported_architectures:
-        log.error(f"Architecture {version.arch!r} not supported by {version.os!r}")
+    if libc.arch not in libc.supported_architectures:
+        log.error(f"Architecture {libc.arch!r} not supported by {libc.os!r}")
         return False
-    if not version.pkgname:
+    if not libc.pkgname:
         log.error(f"Can't fetch {missing_list} as libc doesn't have a package name")
         return False
     dsts = []
     for i, needed_lib in enumerate(missing):
         name = os.path.basename(needed_lib)
-        missing[i] = version.get_libc6_pkg_paths(name)
+        missing[i] = libc.get_libc6_pkg_paths(name)
         dsts.append(name)
-    url = version.libc_pkgurl
+    url = libc.libc_pkgurl
     print()
     dsts_list = ', '.join(repr(d) for d in dsts)
     log.info(f"Fetching {dsts_list} from {url}")
@@ -308,10 +158,10 @@ def get_stripped_libraries(libraries):
     return unstrip_libs
 
 
-def unstrip_libraries(libraries, version):
+def unstrip_libraries(libraries, libc):
     tempdir = tempfile.mkdtemp()
     debug_syms = {}
-    url = version.libc_dbg_pkgurl
+    url = libc.libc_dbg_pkgurl
     log.info(f"Fetching debug symbols from {url}")
     with deb.DebPackage(url) as pkg:
         tar = pkg.tar
@@ -488,26 +338,24 @@ def write_solvepy(binary, libraries, template=None):
     log.success("Successfully written solve.py")
     return True
 
-
 def get_libc_version(libc, arch=None):
+    string = None
     try:
-        f = open(libc, "rb")
+        string = version.get_libc_version_string(libc)
     except OSError as exception:
-        log.fatal(f"Can't open libc for reading: {exception!r}")
+        log.error(f"Error reading libc file {libc!r}: {exception!r}")
 
-    with f:
-        for line in f:
-            parts = line.split(b"GNU C Library ", 1)
-            if len(parts) == 2:
-                version = LibcVersion(parts[1].decode(), arch)
-                log.info(f"libc version: {version}")
-                if version.is_custom:
-                    # pkgname is None here as well
-                    # but the reason for it here is custom compilation
-                    log.warning("Libc appears to be custom-compiled")
-                elif version.pkgname is None:
-                    log.warning("Name of package not present in libc version string")
-                return version
+    if string:
+        libc = version.parse_libc_version(string, arch=arch)
+        log.info(f"libc version: {string!r}")
+        if libc.is_custom:
+            # pkgname is None here as well
+            # but the reason for it here is custom compilation
+            log.warning("Libc appears to be custom-compiled")
+        elif libc.pkgname is None:
+            log.warning("Name of package not present in libc version string")
+        return libc
+
     log.error("Failed to find libc version")
     return None
 
@@ -594,7 +442,7 @@ if __name__ == "__main__":
         log.info(f"libc: {libc}")
         # TODO: if arch is "arm", use libc to decide between armel and armhf
         # this can be determined with the flags in the header
-        version = get_libc_version(libc, arch=arch)
+        libc = get_libc_version(libc, arch=arch)
 
         missing = []
         for needed_lib in needed:
@@ -610,7 +458,7 @@ if __name__ == "__main__":
             log.info(f"ld: {ld}")
 
         if missing:
-            fetch_missing_libraries(missing, libraries, version)
+            fetch_missing_libraries(missing, libraries, libc)
 
         # it's possible that fetching the interpreter failed
         ld = libraries.get("ld", None)
@@ -623,14 +471,14 @@ if __name__ == "__main__":
             except OSError as exception:
                 log.error(f"Can't open {ld!r}: {exception!r}")
 
-        if do_unstrip and version and version.pkgname and arch in version.supported_architectures:
+        if do_unstrip and libc and libc.pkgname and arch in libc.supported_architectures:
             print()
             log.info("Finding stripped libraries to unstrip")
             unstrip_libs = get_stripped_libraries(libraries)
             if unstrip_libs:
                 unstrip_libs_list = ', '.join(map(lambda x: repr(x[0]), unstrip_libs))
                 log.info(f"Unstripping {unstrip_libs_list}")
-                unstrip_libraries(unstrip_libs, version)
+                unstrip_libraries(unstrip_libs, libc)
             else:
                 log.warning("No libraries to unstrip")
 
