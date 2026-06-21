@@ -4,7 +4,6 @@ import tarfile
 import tempfile
 
 import requests
-import zstandard
 
 import utils
 
@@ -37,27 +36,43 @@ class DebPackage:
         _, stderr = utils.run_ar(["x", deb, name], cwd=folder)
         if not stderr:
             return os.path.join(folder, name)
+        self.error = f"Failed to run 'ar x {deb} {name}': err={stderr}"
         return None
 
     def _get_data_tar(self, debpath):
-        folder = self.tempdir
-        for ext in ("gz", "xz"):
-            tar_name = f"data.tar.{ext}"
-            tar_path = self._extract_file_deb(debpath, tar_name, folder=folder)
-            if tar_path:
-                return tarfile.open(tar_path, f"r:{ext}")
-        # tarfile doesn't support .zst
-        # do it ourselves with zstandard
-        tar_zst_name = "data.tar.zst"
-        tar_zst_path = self._extract_file_deb(debpath, tar_zst_name, folder=folder)
-        if not tar_zst_path:
+        # find data.tar.{ext}
+        out, stderr = utils.run_ar(["t", debpath])
+        if stderr:
+            self.error = f"Failed to run 'ar t {debpath}': err={stderr}"
+            return None
+        filenames = out.strip().splitlines()
+        for tar_name in filenames:
+            if tar_name.startswith("data.tar"):
+                break
+        else:
             self.error = "Failed to find data.tar"
             return None
-        dctx = zstandard.ZstdDecompressor()
-        tar_path = os.path.join(folder, "data.tar")
-        with open(tar_zst_path, "rb") as ifh, open(tar_path, "wb+") as ofh:
-            dctx.copy_stream(ifh, ofh)
-        return tarfile.open(tar_path, "r:")
+        # extract data.tar.{ext}
+        folder = self.tempdir
+        tar_path = self._extract_file_deb(debpath, tar_name, folder=folder)
+        if not tar_path:
+            return None
+        try:
+            return tarfile.open(tar_path, "r:*")
+        except tarfile.ReadError:
+            # data.tar.{ext} exists, but can't be extracted with tarfile
+            pass
+        if tar_path.endswith(".zst"):
+            # tarfile doesn't support .zst (before python 3.14)
+            # do it ourselves with zstandard
+            import zstandard
+            dctx = zstandard.ZstdDecompressor()
+            tar_zst_path = tar_path
+            tar_path = os.path.join(folder, "data.tar")
+            with open(tar_zst_path, "rb") as ifh, open(tar_path, "wb+") as ofh:
+                dctx.copy_stream(ifh, ofh)
+            return tarfile.open(tar_path, "r:")
+        return None
 
     def close(self):
         if self.tar:
