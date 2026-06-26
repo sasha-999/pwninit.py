@@ -104,7 +104,7 @@ def get_runpath(elf):
     return get_runpath_from_dynamic(dynamic)
 
 def get_arch(elf):
-    return {
+    arch = {
         ('EM_X86_64', 64): 'amd64',
         ('EM_X86_64', 32): 'amd64', # x32 ABI
         ('EM_386', 32): 'i386',
@@ -117,3 +117,11 @@ def get_arch(elf):
         ('EM_RISCV', 64): 'riscv64',
         ('EM_S390', 64): 's390x',
     }.get((elf['e_machine'], elf.elfclass), elf['e_machine'])
+    if arch == "arm":
+        if elf["e_flags"] & 0x200:
+            # soft-float ABI
+            return "armel"
+        if elf["e_flags"] & 0x400:
+            # hard-float ABI
+            return "armhf"
+    return arch

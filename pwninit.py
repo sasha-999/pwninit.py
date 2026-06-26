@@ -92,8 +92,18 @@ if __name__ == "__main__":
     elif libraries.get("libc", None):
         libc = libraries["libc"]
         log.info(f"libc: {libc}")
-        # TODO: if arch is "arm", use libc to decide between armel and armhf
-        # this can be determined with the flags in the header
+
+        if arch == "arm":
+            # if arch is "arm", use libc to decide between armel and armhf
+            # this can be determined with e_flags
+            try:
+                f = open(libc, "rb")
+                with f:
+                    elf = ELFFile(f)
+                    arch = elfutils.get_arch(elf)
+            except OSError:
+                # if libc can't be opened here, the error will be caught in core.get_libc_version()
+                pass
         libc = core.get_libc_version(libc, arch=arch)
 
         missing = []
