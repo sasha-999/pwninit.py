@@ -1,6 +1,8 @@
 import os
 import re
 
+from . import deb
+
 # ([PKGVERSION])? [stable/release/development] release version X.YZ ...
 re_libc_version = r"(?:GNU C Library )?(?:\((.+?)\) )?([a-z]+) release version (\d+(?:\.\d+)+)"
 
@@ -60,69 +62,61 @@ class LibcVersion:
             return "EGLIBC"
         return None
 
+    def _format_debname(self, name, arch=None):
+        if arch is None:
+            arch = self.arch
+        if self.pkgname is None or arch is None:
+            return None
+        return f"{name}_{self.pkgname}_{arch}.deb"
+
     @property
     def libc_debname(self):
-        if self.pkgname and self.arch:
-            return f"libc6_{self.pkgname}_{self.arch}.deb"
-        return None
+        return self._format_debname("libc6")
 
     @property
     def libc_dbg_debname(self):
         # TODO: add support for debug symbols of multiarch libcs of this form
         # for multiarch ones:
         # e.g. libc6-i386-dbgsym_2.35-0ubuntu3.10_amd64.ddeb
-        if self.pkgname and self.arch:
-            return f"libc6-dbg_{self.pkgname}_{self.arch}.deb"
-        return None
+        return self._format_debname("libc6-dbg")
 
     @property
     def libc_src_debname(self):
-        if self.pkgname:
-            return f"glibc-source_{self.pkgname}_all.deb"
-        return None
+        return self._format_debname("glibc-source", arch="all")
 
-    @property
-    def base_pkgurl(self):
+    def get_download_url(self, name, arch=None):
+        if arch is None:
+            if name in ("glibc-source", "glibc-doc", "locales", "libc-l1on"):
+                arch = "all"
+            else:
+                arch = self.arch
         if self.os == "Ubuntu":
-            # works for both glibc and eglibc
-            return "https://launchpad.net/ubuntu/+archive/primary/+files/"
+            return deb.get_ubuntu_binary_url(name, self.pkgname, arch=arch)
         if self.os == "Debian":
-            if self.is_glibc:
-                return "https://deb.debian.org/debian/pool/main/g/glibc/"
-            # TODO: unstable releases
-            # https://deb.sipwise.com/debian/pool/main/g/glibc/
+            return deb.get_debian_binary_url(name, self.pkgname, arch=arch)
         return None
 
-    def _format_pkgurl(self, debname):
-        base = self.base_pkgurl
-        if base is None or debname is None:
-            return None
-        return base + debname
+    def get_libc_pkgurl(self, arch=None):
+        return self.get_download_url("libc6", arch=arch)
 
-    @property
-    def libc_pkgurl(self):
-        return self._format_pkgurl(self.libc_debname)
-
-    @property
-    def libc_dbg_pkgurl(self):
-        return self._format_pkgurl(self.libc_dbg_debname)
-
-    @property
-    def libc_src_pkgurl(self):
-        return self._format_pkgurl(self.libc_src_debname)
+    def get_libc_dbg_pkgurl(self, arch=None):
+        return self.get_download_url("libc6-dbg", arch=arch)
+    
+    def get_libc_src_pkgurl(self, arch=None):
+        return self.get_download_url("glibc-source", arch=arch)
 
     @property
     def arch_linux_gnu(self):
         return {
-            "amd64": "x86_64-linux-gnu",
-            "i386": "i386-linux-gnu",
-            "arm64": "aarch64-linux-gnu",
-            "armel": "arm-linux-gnueabi",
-            "armhf": "arm-linux-gnueabihf",
-            "mipsel": "mipsel-linux-gnu",
+            "amd64":    "x86_64-linux-gnu",
+            "i386":     "i386-linux-gnu",
+            "arm64":    "aarch64-linux-gnu",
+            "armel":    "arm-linux-gnueabi",
+            "armhf":    "arm-linux-gnueabihf",
+            "mipsel":   "mipsel-linux-gnu",
             "mips64el": "mips64el-linux-gnuabi64",
-            "pp64el": "powerpc64le-linux-gnu",
-            "s390x": "s390x-linux-gnu",
+            "pp64el":   "powerpc64le-linux-gnu",
+            "s390x":    "s390x-linux-gnu",
         }.get(self.arch, None)
 
     def get_libc6_pkg_paths(self, name):

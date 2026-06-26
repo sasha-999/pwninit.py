@@ -109,7 +109,7 @@ def fetch_missing_libraries(missing, libraries, libc):
         name = os.path.basename(needed_lib)
         missing[i] = libc.get_libc6_pkg_paths(name)
         dsts.append(name)
-    url = libc.libc_pkgurl
+    url = libc.get_libc_pkgurl()
     print()
     dsts_list = ', '.join(repr(d) for d in dsts)
     log.info(f"Fetching {dsts_list} from {url}")
@@ -160,7 +160,7 @@ def get_stripped_libraries(libraries):
 def unstrip_libraries(libraries, libc):
     tempdir = tempfile.mkdtemp()
     debug_syms = {}
-    url = libc.libc_dbg_pkgurl
+    url = libc.get_libc_dbg_pkgurl()
     log.info(f"Fetching debug symbols from {url}")
     with deb.DebPackage(url) as pkg:
         tar = pkg.tar

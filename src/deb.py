@@ -7,6 +7,28 @@ import requests
 
 from . import utils
 
+def get_ubuntu_binary_url(name, pkgname, arch="all"):
+    return f"https://launchpad.net/ubuntu/+archive/primary/+files/{name}_{pkgname}_{arch}.deb"
+
+def get_debian_binary_url(name, pkgname, arch="all"):
+    # debsnap -a ARCH NAME PKGNAME
+    # e.g. debsnap -a amd64 libc6 2.41-12+deb13u2
+    # e.g. debsnap -a all glibc-source 2.41-12+deb13u2
+
+    baseurl = "https://snapshot.debian.org"
+    r = requests.get(f"{baseurl}/mr/binary/{name}/")
+    # versions are sorted from newest to oldest
+    for version in r.json()["result"]:
+        if version["binary_version"] == pkgname:
+            break
+    else:
+        return None
+    r = requests.get(f"{baseurl}/mr/package/{version['source']}/{version['version']}/binfiles/{version['name']}/{version['binary_version']}?fileinfo=1")
+    for result in r.json()["result"]:
+        if result["architecture"] == arch:
+            return f"{baseurl}/file/{result['hash']}"
+    return None
+
 
 class DebPackage:
     def __init__(self, url):

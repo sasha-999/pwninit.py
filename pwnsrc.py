@@ -43,7 +43,7 @@ if __name__ == "__main__":
         source = config.GLIBC_SOURCE_FORMAT.format(version=version.version_string, ext=full_ext)
         # if this file already exists, don't fetch it again
         if not os.path.exists(source):
-            url = version.libc_src_pkgurl
+            url = version.get_libc_src_pkgurl()
             log.info(f"Fetching glibc source from {url}")
             with deb.DebPackage(url) as pkg:
                 tar = pkg.tar
