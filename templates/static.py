@@ -4,6 +4,8 @@ from pwn import *
 {bindings}
 
 REMOTE = args.REMOTE
+
+attach = lambda p: gdb.attach(p) if not REMOTE else None
 def conn(level=None):
     if REMOTE:
         return remote("", 1337, level=level)
@@ -14,8 +16,6 @@ def conn(level=None):
         """
         return e.debug(argv=ARGS, gdbscript=gdbscript, level=level)
     return e.process(argv=ARGS, level=level)
-
-attach = lambda p: gdb.attach(p) if not REMOTE else None
 
 p = conn()
 

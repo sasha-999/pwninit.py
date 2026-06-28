@@ -10,6 +10,7 @@ if len(argv) > 1:
 else:
     REMOTE = False
 
+attach = lambda p: gdb.attach(p) if not REMOTE else None
 def conn(level=None):
     if REMOTE:
         return remote(ip, port, level=level)
@@ -20,8 +21,6 @@ def conn(level=None):
         """
         return e.debug(argv=ARGS, gdbscript=gdbscript, level=level)
     return e.process(argv=ARGS, level=level)
-
-attach = lambda p: gdb.attach(p) if not REMOTE else None
 
 p = conn()
 
